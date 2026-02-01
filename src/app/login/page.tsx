@@ -82,7 +82,7 @@ export default function LoginPage() {
           <p className="text-zinc-400">Step 1 of 3: Sign in with Google</p>
         </div>
         <button
-          onClick={() => signIn("google")}
+          onClick={() => signIn("google", undefined, { prompt: "select_account" })}
           className="px-6 py-3 bg-white text-black font-medium rounded-none hover:bg-zinc-200 transition-colors"
         >
           Continue with Google

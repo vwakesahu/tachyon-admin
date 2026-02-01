@@ -10,7 +10,7 @@ interface HomeContentProps {
 
 export function HomeContent({ email, walletAddress }: HomeContentProps) {
   return (
-    <WalletGuard>
+    <WalletGuard sessionWallet={walletAddress}>
       <div className="min-h-screen flex flex-col items-center justify-center bg-black gap-8">
         <div className="text-center space-y-4">
           <h1 className="text-3xl font-heading font-bold text-white">
