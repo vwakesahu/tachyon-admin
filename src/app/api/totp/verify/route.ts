@@ -1,6 +1,7 @@
 import { auth } from "@/lib/auth";
 import * as OTPAuth from "otpauth";
 import { getUserByEmail, createOrUpdateUser } from "@/lib/firebase";
+import { APP_NAME } from "@/lib/constants";
 
 export async function POST(req: Request) {
   try {
@@ -36,7 +37,7 @@ export async function POST(req: Request) {
 
     // Create TOTP instance with the secret
     const totp = new OTPAuth.TOTP({
-      issuer: "Tachyon Protocol",
+      issuer: APP_NAME,
       label: session.user.email,
       algorithm: "SHA1",
       digits: 6,

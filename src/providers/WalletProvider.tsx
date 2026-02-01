@@ -11,13 +11,14 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { base } from "viem/chains";
 import { horizenMainnet } from "@/lib/chains";
 import { useState, useEffect } from "react";
+import { APP_NAME } from "@/lib/constants";
 
 let wagmiConfig: Config | null = null;
 
 function getWagmiConfig(): Config {
   if (!wagmiConfig) {
     wagmiConfig = getDefaultConfig({
-      appName: "Tachyon Protocol",
+      appName: APP_NAME,
       projectId: process.env.NEXT_PUBLIC_WALLET_CONNECT_PROJECT_ID!,
       chains: [base, horizenMainnet],
       ssr: true,

@@ -3,6 +3,7 @@ import { Space_Grotesk, Inter, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import { ThemeProvider } from "@/components/theme-provider";
 import { AuthProvider } from "@/providers/AuthProvider";
+import { APP_NAME } from "@/lib/constants";
 
 const spaceGrotesk = Space_Grotesk({
   variable: "--font-heading",
@@ -30,7 +31,7 @@ export const metadata: Metadata = {
     "The privacy-native intent settlement protocol for instant cross-chain execution. Bridge assets anonymously between Horizen and other chains with TEE-secured technology.",
   keywords: "cross-chain, privacy, bridge, Horizen, TEE, blockchain, DeFi",
   openGraph: {
-    title: "Tachyon Protocol",
+    title: APP_NAME,
     description:
       "Privacy-native intent settlement for anonymous cross-chain bridging",
     url: "https://tachyon.pe",

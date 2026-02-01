@@ -2,6 +2,7 @@
 
 import { signOut } from "next-auth/react";
 import { WalletGuard } from "./WalletGuard";
+import { APP_NAME_ADMIN } from "@/lib/constants";
 /* eslint-disable @next/next/no-img-element */
 
 interface HomeContentProps {
@@ -201,7 +202,7 @@ export function HomeContent({ email, walletAddress }: HomeContentProps) {
         {/* Footer */}
         <footer className="border-t border-zinc-900 py-6">
           <div className="max-w-7xl mx-auto px-6 flex items-center justify-between text-sm">
-            <p className="text-zinc-600">Tachyon Protocol Admin</p>
+            <p className="text-zinc-600">{APP_NAME_ADMIN}</p>
             <p className="text-zinc-700">Secured with 3-factor authentication</p>
           </div>
         </footer>

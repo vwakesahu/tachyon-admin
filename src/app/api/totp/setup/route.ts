@@ -1,6 +1,7 @@
 import { auth } from "@/lib/auth";
 import * as OTPAuth from "otpauth";
 import QRCode from "qrcode";
+import { APP_NAME } from "@/lib/constants";
 
 export async function GET() {
   try {
@@ -16,7 +17,7 @@ export async function GET() {
 
     // Create TOTP instance
     const totp = new OTPAuth.TOTP({
-      issuer: "Tachyon Protocol",
+      issuer: APP_NAME,
       label: session.user.email,
       algorithm: "SHA1",
       digits: 6,

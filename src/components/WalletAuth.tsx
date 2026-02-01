@@ -6,6 +6,7 @@ import { useSession } from "next-auth/react";
 import { useEffect, useState, useCallback, useRef } from "react";
 import { SiweMessage } from "siwe";
 import { useRouter } from "next/navigation";
+import { APP_NAME_ADMIN } from "@/lib/constants";
 
 interface WalletLinkInfo {
   hasLinkedWallet: boolean;
@@ -64,7 +65,7 @@ export function WalletAuth() {
       const message = new SiweMessage({
         domain: window.location.host,
         address,
-        statement: "Sign in to Tachyon Protocol Admin",
+        statement: `Sign in to ${APP_NAME_ADMIN}`,
         uri: window.location.origin,
         version: "1",
         chainId: chain.id,
