@@ -35,10 +35,7 @@ export function TOTPVerify() {
         throw new Error(data.error || "Verification failed");
       }
 
-      // Update session to mark TOTP as verified for this session
       await update({ totpVerified: true });
-
-      // Refresh to proceed to next step
       router.refresh();
     } catch (err: unknown) {
       const errorMessage =
@@ -51,17 +48,8 @@ export function TOTPVerify() {
   }
 
   return (
-    <div className="flex flex-col items-center gap-6 max-w-md">
-      <div className="text-center space-y-2">
-        <h2 className="text-xl font-semibold text-white">
-          Two-Factor Authentication
-        </h2>
-        <p className="text-sm text-zinc-400">
-          Enter the 6-digit code from your authenticator app
-        </p>
-      </div>
-
-      <form onSubmit={handleVerify} className="w-full space-y-4">
+    <div className="w-full">
+      <form onSubmit={handleVerify} className="space-y-4">
         <div>
           <input
             type="text"
@@ -71,25 +59,34 @@ export function TOTPVerify() {
             value={code}
             onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
             placeholder="000000"
-            className="w-full px-4 py-3 bg-zinc-900 border border-zinc-700 text-white font-mono text-center text-2xl tracking-widest placeholder:text-zinc-600 focus:outline-none focus:border-zinc-500"
+            className="w-full px-4 py-4 bg-zinc-900 border border-zinc-800 text-white font-mono text-center text-2xl tracking-[0.5em] placeholder:text-zinc-700 focus:outline-none focus:border-zinc-600 transition-colors"
             autoComplete="one-time-code"
             autoFocus
           />
         </div>
 
-        {error && <p className="text-sm text-red-500 text-center">{error}</p>}
+        {error && (
+          <p className="text-sm text-red-500 text-center">{error}</p>
+        )}
 
         <button
           type="submit"
           disabled={code.length !== 6 || isVerifying}
-          className="w-full px-6 py-3 bg-white text-black font-medium hover:bg-zinc-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          className="w-full px-6 py-3 bg-white text-black font-medium hover:bg-zinc-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
         >
-          {isVerifying ? "Verifying..." : "Verify"}
+          {isVerifying ? (
+            <>
+              <div className="w-4 h-4 border-2 border-zinc-400 border-t-black rounded-full animate-spin" />
+              Verifying...
+            </>
+          ) : (
+            "Continue"
+          )}
         </button>
       </form>
 
-      <p className="text-xs text-zinc-500 text-center">
-        Open your authenticator app to view your verification code
+      <p className="text-xs text-zinc-600 text-center mt-4">
+        Open your authenticator app to view your code
       </p>
     </div>
   );

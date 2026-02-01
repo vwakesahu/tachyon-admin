@@ -27,11 +27,11 @@ export function WalletAuth() {
   const [isVerifying, setIsVerifying] = useState(false);
   const [isCheckingLink, setIsCheckingLink] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [walletMismatch, setWalletMismatch] = useState<WalletMismatchError | null>(null);
+  const [walletMismatch, setWalletMismatch] =
+    useState<WalletMismatchError | null>(null);
   const [linkInfo, setLinkInfo] = useState<WalletLinkInfo | null>(null);
   const hasAttemptedVerification = useRef(false);
 
-  // Check if user has a linked wallet on mount
   useEffect(() => {
     checkWalletLink();
   }, []);
@@ -44,7 +44,7 @@ export function WalletAuth() {
         setLinkInfo(data);
       }
     } catch {
-      // Ignore errors, will try to link on verification
+      // Ignore errors
     } finally {
       setIsCheckingLink(false);
     }
@@ -58,27 +58,23 @@ export function WalletAuth() {
     setWalletMismatch(null);
 
     try {
-      // 1. Get nonce from server
       const nonceRes = await fetch("/api/siwe/nonce");
       const { nonce } = await nonceRes.json();
 
-      // 2. Create SIWE message
       const message = new SiweMessage({
         domain: window.location.host,
         address,
-        statement: "Sign in to Tachyon Protocol",
+        statement: "Sign in to Tachyon Protocol Admin",
         uri: window.location.origin,
         version: "1",
         chainId: chain.id,
         nonce,
       });
 
-      // 3. Sign message
       const signature = await signMessageAsync({
         message: message.prepareMessage(),
       });
 
-      // 4. Verify on server
       const verifyRes = await fetch("/api/siwe/verify", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -88,7 +84,6 @@ export function WalletAuth() {
       const verifyData = await verifyRes.json();
 
       if (!verifyRes.ok) {
-        // Handle wallet mismatch specifically
         if (verifyRes.status === 403 && verifyData.linkedWallet) {
           setWalletMismatch({
             linkedWallet: verifyData.linkedWallet,
@@ -101,10 +96,7 @@ export function WalletAuth() {
         throw new Error(verifyData.error || "Verification failed");
       }
 
-      // 5. Update NextAuth session with wallet address
       await update({ walletAddress: address });
-
-      // 6. Redirect to app
       router.push("/");
       router.refresh();
     } catch (err: unknown) {
@@ -119,88 +111,129 @@ export function WalletAuth() {
     }
   }, [address, chain, signMessageAsync, update, router, disconnect]);
 
-  // Trigger SIWE when wallet connects
   useEffect(() => {
-    if (isConnected && address && !isVerifying && !hasAttemptedVerification.current) {
+    if (
+      isConnected &&
+      address &&
+      !isVerifying &&
+      !hasAttemptedVerification.current
+    ) {
       hasAttemptedVerification.current = true;
       handleSiweVerification();
     }
   }, [isConnected, address, isVerifying, handleSiweVerification]);
 
-  // Reset verification flag when disconnected
   useEffect(() => {
     if (!isConnected) {
       hasAttemptedVerification.current = false;
     }
   }, [isConnected]);
 
-  // Format wallet address for display
   function formatAddress(addr: string): string {
     return `${addr.slice(0, 6)}...${addr.slice(-4)}`;
   }
 
   if (isCheckingLink) {
     return (
-      <div className="text-zinc-400">Checking wallet link status...</div>
+      <div className="flex flex-col items-center gap-4 py-4">
+        <div className="w-8 h-8 border-2 border-zinc-700 border-t-white rounded-full animate-spin" />
+        <p className="text-zinc-500 text-sm">Checking wallet status...</p>
+      </div>
     );
   }
 
   return (
-    <div className="flex flex-col items-center gap-4 max-w-md">
-      {/* Show linked wallet info if exists */}
+    <div className="flex flex-col items-center gap-5 w-full">
+      {/* Linked wallet info */}
       {linkInfo?.hasLinkedWallet && linkInfo.linkedWallet && !walletMismatch && (
-        <div className="w-full p-4 bg-zinc-900 border border-zinc-700 text-center">
-          <p className="text-sm text-zinc-400 mb-1">Your linked wallet:</p>
-          <p className="font-mono text-green-400">
+        <div className="w-full p-4 bg-zinc-900 border border-zinc-800 text-center">
+          <p className="text-xs text-zinc-500 mb-2">Your linked wallet</p>
+          <p className="font-mono text-sm text-white">
             {formatAddress(linkInfo.linkedWallet)}
           </p>
-          <p className="text-xs text-zinc-500 mt-2">
-            Please connect this wallet to continue
-          </p>
         </div>
       )}
 
-      {/* Show first-time user message */}
+      {/* First-time user */}
       {!linkInfo?.hasLinkedWallet && !walletMismatch && (
-        <div className="w-full p-4 bg-zinc-900 border border-zinc-700 text-center">
-          <p className="text-sm text-zinc-400">
-            Connect a wallet to link it to your account.
+        <div className="w-full p-4 bg-zinc-900 border border-zinc-800 text-center">
+          <p className="text-zinc-400 text-sm">
+            Connect a wallet to link to your account
           </p>
-          <p className="text-xs text-zinc-500 mt-2">
-            This wallet will be permanently linked to your email.
+          <p className="text-zinc-600 text-xs mt-1">
+            This will be permanently linked to your email
           </p>
         </div>
       )}
 
-      {/* Wallet mismatch error */}
+      {/* Mismatch error */}
       {walletMismatch && (
-        <div className="w-full p-4 bg-red-950 border border-red-800 text-center">
-          <p className="text-sm text-red-400 font-medium mb-2">
-            Wallet Mismatch
-          </p>
-          <p className="text-xs text-zinc-400 mb-3">
-            Your email is linked to a different wallet:
-          </p>
-          <p className="font-mono text-green-400 mb-2">
+        <div className="w-full p-4 bg-red-950/50 border border-red-900 text-center">
+          <div className="flex items-center justify-center gap-2 mb-3">
+            <svg
+              className="w-4 h-4 text-red-500"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+              />
+            </svg>
+            <p className="text-red-400 text-sm font-medium">Wallet Mismatch</p>
+          </div>
+          <p className="text-zinc-400 text-xs mb-2">Required wallet:</p>
+          <p className="font-mono text-sm text-green-400 mb-3">
             {formatAddress(walletMismatch.linkedWallet)}
           </p>
-          <p className="text-xs text-zinc-500">
-            You connected: {formatAddress(walletMismatch.connectedWallet)}
-          </p>
-          <p className="text-xs text-zinc-400 mt-3">
-            Please disconnect and connect the correct wallet.
+          <p className="text-zinc-500 text-xs">
+            Connected: {formatAddress(walletMismatch.connectedWallet)}
           </p>
         </div>
       )}
 
-      <ConnectButton />
-
-      {isVerifying && (
-        <p className="text-sm text-zinc-400">Verifying wallet ownership...</p>
-      )}
+      {/* Connect button */}
+      <div className="w-full flex justify-center">
+        <ConnectButton.Custom>
+          {({ openConnectModal, connectModalOpen }) => (
+            <button
+              onClick={openConnectModal}
+              disabled={connectModalOpen || isVerifying}
+              className="w-full px-6 py-3 bg-white text-black font-medium hover:bg-zinc-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            >
+              {isVerifying ? (
+                <>
+                  <div className="w-4 h-4 border-2 border-zinc-400 border-t-black rounded-full animate-spin" />
+                  Verifying...
+                </>
+              ) : (
+                <>
+                  <svg
+                    className="w-5 h-5"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={1.5}
+                      d="M21 12a2.25 2.25 0 00-2.25-2.25H15a3 3 0 11-6 0H5.25A2.25 2.25 0 003 12m18 0v6a2.25 2.25 0 01-2.25 2.25H5.25A2.25 2.25 0 013 18v-6m18 0V9M3 12V9m18 0a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 003 9m18 0V6a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 003 6v3"
+                    />
+                  </svg>
+                  Connect Wallet
+                </>
+              )}
+            </button>
+          )}
+        </ConnectButton.Custom>
+      </div>
 
       {error && !walletMismatch && (
-        <p className="text-sm text-red-500">{error}</p>
+        <p className="text-sm text-red-500 text-center">{error}</p>
       )}
     </div>
   );
