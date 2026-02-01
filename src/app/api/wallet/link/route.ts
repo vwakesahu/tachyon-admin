@@ -1,12 +1,5 @@
 import { auth } from "@/lib/auth";
-import { cookies } from "next/headers";
-import crypto from "crypto";
-
-// Helper to create a cookie name from email
-function getWalletCookieName(email: string): string {
-  const hash = crypto.createHash("sha256").update(email).digest("hex").slice(0, 16);
-  return `wallet-link-${hash}`;
-}
+import { getUserByEmail, getUserByWallet, createOrUpdateUser } from "@/lib/firebase";
 
 // Check if email has a linked wallet
 export async function GET() {
@@ -17,13 +10,11 @@ export async function GET() {
       return Response.json({ error: "Not authenticated" }, { status: 401 });
     }
 
-    const cookieStore = await cookies();
-    const cookieName = getWalletCookieName(session.user.email);
-    const linkedWallet = cookieStore.get(cookieName)?.value;
+    const user = await getUserByEmail(session.user.email);
 
     return Response.json({
-      hasLinkedWallet: !!linkedWallet,
-      linkedWallet: linkedWallet || null,
+      hasLinkedWallet: !!user?.walletAddress,
+      linkedWallet: user?.walletAddress || null,
     });
   } catch (error) {
     console.error("Wallet link check error:", error);
@@ -46,33 +37,37 @@ export async function POST(req: Request) {
       return Response.json({ error: "Wallet address required" }, { status: 400 });
     }
 
-    const cookieStore = await cookies();
-    const cookieName = getWalletCookieName(session.user.email);
+    const normalizedWallet = walletAddress.toLowerCase();
 
-    // Check if already linked to a different wallet
-    const existingWallet = cookieStore.get(cookieName)?.value;
-    if (existingWallet && existingWallet.toLowerCase() !== walletAddress.toLowerCase()) {
+    // Check if email already has a linked wallet
+    const existingUser = await getUserByEmail(session.user.email);
+    if (existingUser?.walletAddress && existingUser.walletAddress !== normalizedWallet) {
       return Response.json(
         {
           error: "Email already linked to different wallet",
-          linkedWallet: existingWallet,
+          linkedWallet: existingUser.walletAddress,
         },
         { status: 409 }
       );
     }
 
-    // Store the wallet-email link
-    cookieStore.set(cookieName, walletAddress.toLowerCase(), {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "strict",
-      maxAge: 60 * 60 * 24 * 365 * 5, // 5 years
-      path: "/",
+    // Check if wallet is already linked to another email
+    const walletUser = await getUserByWallet(normalizedWallet);
+    if (walletUser && walletUser.email !== session.user.email) {
+      return Response.json(
+        { error: "Wallet already linked to another account" },
+        { status: 409 }
+      );
+    }
+
+    // Link wallet to email
+    await createOrUpdateUser(session.user.email, {
+      walletAddress: normalizedWallet,
     });
 
     return Response.json({
       success: true,
-      linkedWallet: walletAddress.toLowerCase(),
+      linkedWallet: normalizedWallet,
     });
   } catch (error) {
     console.error("Wallet link error:", error);

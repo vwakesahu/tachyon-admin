@@ -1,6 +1,6 @@
 import { auth } from "@/lib/auth";
 import * as OTPAuth from "otpauth";
-import { cookies } from "next/headers";
+import { getUserByEmail, createOrUpdateUser } from "@/lib/firebase";
 
 export async function POST(req: Request) {
   try {
@@ -18,13 +18,13 @@ export async function POST(req: Request) {
     }
 
     // For setup, we need the secret from the request
-    // For verification, we get it from the cookie (stored during setup)
+    // For verification, we get it from the database
     let totpSecret = secret;
 
     if (!isSetup) {
-      // Get secret from httpOnly cookie for returning users
-      const cookieStore = await cookies();
-      totpSecret = cookieStore.get("totp-secret")?.value;
+      // Get secret from database for returning users
+      const user = await getUserByEmail(session.user.email);
+      totpSecret = user?.totpSecret;
 
       if (!totpSecret) {
         return Response.json(
@@ -51,16 +51,10 @@ export async function POST(req: Request) {
       return Response.json({ error: "Invalid code" }, { status: 422 });
     }
 
-    // If this is initial setup, store the secret in an httpOnly cookie
-    // In production, you'd store this in a database
+    // If this is initial setup, store the secret in the database
     if (isSetup) {
-      const cookieStore = await cookies();
-      cookieStore.set("totp-secret", totpSecret, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === "production",
-        sameSite: "strict",
-        maxAge: 60 * 60 * 24 * 365, // 1 year
-        path: "/",
+      await createOrUpdateUser(session.user.email, {
+        totpSecret: totpSecret,
       });
     }
 
@@ -83,10 +77,9 @@ export async function GET() {
       return Response.json({ error: "Not authenticated" }, { status: 401 });
     }
 
-    const cookieStore = await cookies();
-    const hasTotp = !!cookieStore.get("totp-secret")?.value;
+    const user = await getUserByEmail(session.user.email);
 
-    return Response.json({ hasTotp });
+    return Response.json({ hasTotp: !!user?.totpSecret });
   } catch (error) {
     console.error("TOTP check error:", error);
     return Response.json({ error: "Check failed" }, { status: 500 });

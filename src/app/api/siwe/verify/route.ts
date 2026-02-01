@@ -1,13 +1,7 @@
 import { SiweMessage } from "siwe";
 import { cookies } from "next/headers";
 import { auth } from "@/lib/auth";
-import crypto from "crypto";
-
-// Helper to create a cookie name from email
-function getWalletCookieName(email: string): string {
-  const hash = crypto.createHash("sha256").update(email).digest("hex").slice(0, 16);
-  return `wallet-link-${hash}`;
-}
+import { getUserByEmail, getUserByWallet, createOrUpdateUser } from "@/lib/firebase";
 
 export async function POST(req: Request) {
   try {
@@ -36,32 +30,40 @@ export async function POST(req: Request) {
       return Response.json({ error: "Invalid signature" }, { status: 422 });
     }
 
-    // Check wallet-email link
-    const walletCookieName = getWalletCookieName(session.user.email);
-    const linkedWallet = cookieStore.get(walletCookieName)?.value;
     const connectedWallet = siweMessage.address.toLowerCase();
 
-    if (linkedWallet) {
+    // Check if email already has a linked wallet
+    const user = await getUserByEmail(session.user.email);
+
+    if (user?.walletAddress) {
       // Email already has a linked wallet - verify it matches
-      if (linkedWallet.toLowerCase() !== connectedWallet) {
+      if (user.walletAddress !== connectedWallet) {
         return Response.json(
           {
             error: "Wallet mismatch",
             message: "This email is linked to a different wallet",
-            linkedWallet: linkedWallet,
+            linkedWallet: user.walletAddress,
             connectedWallet: connectedWallet,
           },
           { status: 403 }
         );
       }
     } else {
+      // Check if wallet is already linked to another email
+      const walletUser = await getUserByWallet(connectedWallet);
+      if (walletUser && walletUser.email !== session.user.email) {
+        return Response.json(
+          {
+            error: "Wallet already linked",
+            message: "This wallet is already linked to another account",
+          },
+          { status: 403 }
+        );
+      }
+
       // First time - link wallet to email
-      cookieStore.set(walletCookieName, connectedWallet, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === "production",
-        sameSite: "strict",
-        maxAge: 60 * 60 * 24 * 365 * 5, // 5 years
-        path: "/",
+      await createOrUpdateUser(session.user.email, {
+        walletAddress: connectedWallet,
       });
     }
 
@@ -71,7 +73,7 @@ export async function POST(req: Request) {
     return Response.json({
       success: true,
       address: siweMessage.address,
-      isNewLink: !linkedWallet,
+      isNewLink: !user?.walletAddress,
     });
   } catch (error) {
     console.error("SIWE verification error:", error);
