@@ -33,6 +33,11 @@ declare module "next-auth/jwt" {
   }
 }
 
+const ALLOWED_DOMAINS = (process.env.ALLOWED_EMAIL_DOMAINS ?? "")
+  .split(",")
+  .map((d) => d.trim().toLowerCase())
+  .filter(Boolean);
+
 const config: NextAuthConfig = {
   providers: [
     Google({
@@ -43,6 +48,11 @@ const config: NextAuthConfig = {
   session: { strategy: "jwt" },
   pages: { signIn: "/login" },
   callbacks: {
+    async signIn({ user }) {
+      if (ALLOWED_DOMAINS.length === 0) return true;
+      const domain = user.email?.split("@")[1]?.toLowerCase();
+      return domain ? ALLOWED_DOMAINS.includes(domain) : false;
+    },
     async jwt({ token, trigger, session }) {
       // Initialize TOTP status
       if (token.totpEnabled === undefined) {

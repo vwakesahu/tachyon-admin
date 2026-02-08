@@ -11,7 +11,9 @@ const WalletAuth = dynamic(
   {
     ssr: false,
     loading: () => (
-      <div className="text-zinc-500 text-sm">Loading wallet connection...</div>
+      <div className="text-muted-foreground text-sm">
+        Loading wallet connection...
+      </div>
     ),
   }
 );
@@ -21,7 +23,9 @@ const TOTPSetup = dynamic(
   {
     ssr: false,
     loading: () => (
-      <div className="text-zinc-500 text-sm">Loading authenticator setup...</div>
+      <div className="text-muted-foreground text-sm">
+        Loading authenticator setup...
+      </div>
     ),
   }
 );
@@ -31,57 +35,50 @@ const TOTPVerify = dynamic(
   {
     ssr: false,
     loading: () => (
-      <div className="text-zinc-500 text-sm">Loading verification...</div>
+      <div className="text-muted-foreground text-sm">
+        Loading verification...
+      </div>
     ),
   }
 );
 
-// Step indicator component
-function StepIndicator({ currentStep }: { currentStep: number }) {
-  const steps = [
-    { num: 1, label: "Sign In" },
-    { num: 2, label: "2FA" },
-    { num: 3, label: "Wallet" },
-  ];
+// Minimal step label
+function StepLabel({ currentStep }: { currentStep: number }) {
+  const labels: Record<number, { tag: string; heading: string; sub: string }> =
+    {
+      1: {
+        tag: "01 — Authenticate",
+        heading: "Sign in",
+        sub: "Verify your identity to continue",
+      },
+      2: {
+        tag: "02 — Two-Factor",
+        heading: "Verify",
+        sub: "Confirm with your authenticator",
+      },
+      3: {
+        tag: "03 — Wallet",
+        heading: "Connect",
+        sub: "Link your wallet to proceed",
+      },
+      4: {
+        tag: "04 — Complete",
+        heading: "Done",
+        sub: "Redirecting you now",
+      },
+    };
+
+  const step = labels[currentStep] || labels[1];
 
   return (
-    <div className="flex items-center gap-2">
-      {steps.map((step, index) => (
-        <div key={step.num} className="flex items-center">
-          <div
-            className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-mono transition-all ${
-              currentStep >= step.num
-                ? "bg-white text-black"
-                : "bg-zinc-800 text-zinc-500"
-            }`}
-          >
-            {currentStep > step.num ? (
-              <svg
-                className="w-4 h-4"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M5 13l4 4L19 7"
-                />
-              </svg>
-            ) : (
-              step.num
-            )}
-          </div>
-          {index < steps.length - 1 && (
-            <div
-              className={`w-8 h-[2px] mx-1 transition-all ${
-                currentStep > step.num ? "bg-white" : "bg-zinc-800"
-              }`}
-            />
-          )}
-        </div>
-      ))}
+    <div className="space-y-4">
+      <span className="text-xs font-mono tracking-[0.2em] uppercase text-muted-foreground">
+        {step.tag}
+      </span>
+      <h1 className="text-5xl sm:text-6xl font-heading font-bold text-foreground leading-none tracking-tight">
+        {step.heading}
+      </h1>
+      <p className="text-muted-foreground text-sm max-w-xs">{step.sub}</p>
     </div>
   );
 }
@@ -107,6 +104,38 @@ function GoogleIcon() {
         d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
       />
     </svg>
+  );
+}
+
+// Animated grid decoration
+function GridDecoration() {
+  return (
+    <div className="absolute inset-0 overflow-hidden pointer-events-none" aria-hidden>
+      {/* Horizontal lines */}
+      <div className="absolute top-1/4 left-0 right-0 h-px bg-border/40" />
+      <div className="absolute top-2/4 left-0 right-0 h-px bg-border/20" />
+      <div className="absolute top-3/4 left-0 right-0 h-px bg-border/40" />
+      {/* Vertical lines */}
+      <div className="absolute top-0 bottom-0 left-1/4 w-px bg-border/20" />
+      <div className="absolute top-0 bottom-0 left-2/4 w-px bg-border/10" />
+      <div className="absolute top-0 bottom-0 left-3/4 w-px bg-border/20" />
+      {/* Accent dot */}
+      <div className="absolute top-1/4 left-3/4 w-2 h-2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-primary/30 animate-pulse" />
+      <div className="absolute top-3/4 left-1/4 w-1.5 h-1.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-muted-foreground/20 animate-pulse [animation-delay:1s]" />
+    </div>
+  );
+}
+
+// Progress bar at top
+function ProgressBar({ step }: { step: number }) {
+  const progress = ((step - 1) / 3) * 100;
+  return (
+    <div className="fixed top-0 left-0 right-0 h-[2px] bg-border/30 z-50">
+      <div
+        className="h-full bg-foreground transition-all duration-700 ease-out"
+        style={{ width: `${progress}%` }}
+      />
+    </div>
   );
 }
 
@@ -146,7 +175,7 @@ export default function LoginPage() {
   // Loading state
   if (status === "loading") {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-black">
+      <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="animate-pulse">
           <img src="/logo.svg" alt="Tachyon" width={48} height={48} />
         </div>
@@ -155,110 +184,132 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col bg-black">
+    <div className="min-h-screen flex flex-col bg-background text-foreground relative">
+      <ProgressBar step={currentStep} />
+      <GridDecoration />
+
       {/* Header */}
-      <header className="p-6">
+      <header className="relative z-10 flex items-center justify-between p-6 sm:p-8">
         <div className="flex items-center gap-3">
-          <img src="/logo.svg" alt="Tachyon" width={32} height={32} />
-          <span className="text-white font-heading font-semibold text-lg">
+          <img src="/logo.svg" alt="Tachyon" width={28} height={28} />
+          <span className="font-heading font-semibold text-lg text-foreground">
             tachyon
           </span>
-          <span className="text-zinc-600 font-mono text-sm">admin</span>
+          <span className="text-muted-foreground font-mono text-[11px] tracking-wider uppercase">
+            admin
+          </span>
         </div>
       </header>
 
       {/* Main content */}
-      <main className="flex-1 flex items-center justify-center p-6">
-        <div className="w-full max-w-md">
-          {/* Card */}
-          <div className="bg-zinc-950 border border-zinc-800 p-8">
-            {/* Step indicator */}
-            <div className="flex justify-center mb-8">
-              <StepIndicator currentStep={currentStep} />
-            </div>
+      <main className="relative z-10 flex-1 flex items-center justify-center px-6 sm:px-8">
+        <div className="w-full max-w-lg">
+          {/* Step heading area */}
+          <div className="mb-10">
+            <StepLabel currentStep={currentStep} />
+          </div>
 
-            {/* Step 1: Google Login */}
-            {!session?.user && (
-              <div className="space-y-6">
-                <div className="text-center space-y-2">
-                  <h1 className="text-2xl font-heading font-semibold text-white">
-                    Welcome back
-                  </h1>
-                  <p className="text-zinc-500 text-sm">
-                    Sign in to access the admin dashboard
+          {/* Step 1: Google Login */}
+          {!session?.user && (
+            <div className="space-y-8">
+              <button
+                onClick={() =>
+                  signIn("google", undefined, { prompt: "select_account" })
+                }
+                className="group w-full flex items-center justify-between px-6 py-4 border border-border cursor-pointer bg-card hover:bg-accent transition-all duration-300"
+              >
+                <div className="flex items-center gap-4">
+                  <div className="w-10 h-10 bg-secondary flex items-center justify-center">
+                    <GoogleIcon />
+                  </div>
+                  <div className="text-left">
+                    <span className="block text-sm font-medium text-foreground">
+                      Continue with Google
+                    </span>
+                    <span className="block text-xs text-muted-foreground">
+                      Use your organization account
+                    </span>
+                  </div>
+                </div>
+                <svg
+                  className="w-5 h-5 text-muted-foreground group-hover:text-foreground group-hover:translate-x-1 transition-all duration-300"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={1.5}
+                    d="M17 8l4 4m0 0l-4 4m4-4H3"
+                  />
+                </svg>
+              </button>
+
+              <p className="text-[11px] font-mono text-muted-foreground tracking-wide text-center">
+                Restricted to authorized administrators
+              </p>
+            </div>
+          )}
+
+          {/* Step 2: TOTP */}
+          {session?.user && !session.user.totpVerified && (
+            <div className="space-y-6">
+              {checkingTOTP || hasTOTP === null ? (
+                <div className="flex flex-col items-center gap-4 py-12">
+                  <div className="w-8 h-8 border-2 border-border border-t-foreground rounded-full animate-spin" />
+                  <p className="text-muted-foreground text-sm">
+                    Checking authentication status...
                   </p>
                 </div>
-
-                <button
-                  onClick={() =>
-                    signIn("google", undefined, { prompt: "select_account" })
-                  }
-                  className="w-full flex items-center justify-center gap-3 px-6 py-3 bg-white text-black font-medium hover:bg-zinc-100 transition-colors"
-                >
-                  <GoogleIcon />
-                  Continue with Google
-                </button>
-
-                <p className="text-xs text-zinc-600 text-center">
-                  Only authorized administrators can access this dashboard
-                </p>
-              </div>
-            )}
-
-            {/* Step 2: TOTP */}
-            {session?.user && !session.user.totpVerified && (
-              <div className="space-y-6">
-                {checkingTOTP || hasTOTP === null ? (
-                  <div className="flex flex-col items-center gap-4 py-8">
-                    <div className="w-8 h-8 border-2 border-zinc-700 border-t-white rounded-full animate-spin" />
-                    <p className="text-zinc-500 text-sm">
-                      Checking authentication status...
+              ) : (
+                <>
+                  <div className="space-y-3">
+                    <h2 className="text-lg font-heading font-semibold text-foreground">
+                      {hasTOTP ? "Enter Code" : "Setup Required"}
+                    </h2>
+                    <p className="text-muted-foreground text-sm">
+                      {hasTOTP
+                        ? "Open your authenticator app and enter the 6-digit code"
+                        : "Configure two-factor authentication to secure your account"}
                     </p>
-                  </div>
-                ) : (
-                  <>
-                    <div className="text-center space-y-2">
-                      <h1 className="text-2xl font-heading font-semibold text-white">
-                        {hasTOTP ? "Verify Identity" : "Set Up 2FA"}
-                      </h1>
-                      <p className="text-zinc-500 text-sm">
-                        {hasTOTP
-                          ? "Enter your authenticator code"
-                          : "Secure your account with two-factor authentication"}
-                      </p>
-                      <p className="text-zinc-600 text-xs font-mono">
+                    <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-md bg-secondary">
+                      <div className="w-1.5 h-1.5 rounded-full bg-chart-2" />
+                      <span className="text-xs font-mono text-secondary-foreground">
                         {session.user.email}
-                      </p>
+                      </span>
                     </div>
-                    {hasTOTP ? <TOTPVerify /> : <TOTPSetup />}
-                  </>
-                )}
+                  </div>
+                  {hasTOTP ? <TOTPVerify /> : <TOTPSetup />}
+                </>
+              )}
+            </div>
+          )}
+
+          {/* Step 3: Wallet */}
+          {session?.user &&
+            session.user.totpVerified &&
+            !session.user.walletConnected && (
+              <div className="space-y-6">
+                <div className="space-y-3">
+                  <h2 className="text-lg font-heading font-semibold text-foreground">
+                    Link Wallet
+                  </h2>
+                  <p className="text-muted-foreground text-sm">
+                    Connect and sign to verify wallet ownership
+                  </p>
+                </div>
+                <WalletAuth />
               </div>
             )}
 
-            {/* Step 3: Wallet */}
-            {session?.user &&
-              session.user.totpVerified &&
-              !session.user.walletConnected && (
-                <div className="space-y-6">
-                  <div className="text-center space-y-2">
-                    <h1 className="text-2xl font-heading font-semibold text-white">
-                      Connect Wallet
-                    </h1>
-                    <p className="text-zinc-500 text-sm">
-                      Link your wallet to verify ownership
-                    </p>
-                  </div>
-                  <WalletAuth />
-                </div>
-              )}
-
-            {/* Fully authenticated */}
-            {session?.user?.walletConnected && (
-              <div className="flex flex-col items-center gap-4 py-8">
-                <div className="w-12 h-12 bg-green-500/10 rounded-full flex items-center justify-center">
+          {/* Fully authenticated */}
+          {session?.user?.walletConnected && (
+            <div className="flex flex-col items-center gap-6 py-12">
+              <div className="relative">
+                <div className="w-14 h-14 rounded-full bg-chart-2/10 flex items-center justify-center">
                   <svg
-                    className="w-6 h-6 text-green-500"
+                    className="w-7 h-7 text-chart-2"
                     fill="none"
                     stroke="currentColor"
                     viewBox="0 0 24 24"
@@ -271,18 +322,39 @@ export default function LoginPage() {
                     />
                   </svg>
                 </div>
-                <p className="text-zinc-400">Authentication complete</p>
-                <p className="text-zinc-600 text-sm">Redirecting to dashboard...</p>
+                <div className="absolute inset-0 rounded-full bg-chart-2/5 animate-ping" />
               </div>
-            )}
-          </div>
-
-          {/* Footer text */}
-          <p className="text-center text-zinc-700 text-xs mt-6">
-            Protected by multi-factor authentication
-          </p>
+              <div className="text-center space-y-1">
+                <p className="text-foreground font-medium">
+                  Authentication complete
+                </p>
+                <p className="text-muted-foreground text-sm">
+                  Redirecting to dashboard...
+                </p>
+              </div>
+            </div>
+          )}
         </div>
       </main>
+
+      {/* Footer */}
+      <footer className="relative z-10 flex items-center justify-between p-6 sm:p-8">
+        <span className="text-[11px] font-mono text-muted-foreground/50 tracking-wide">
+          Multi-factor protected
+        </span>
+        <div className="flex items-center gap-1.5">
+          {[1, 2, 3].map((s) => (
+            <div
+              key={s}
+              className={`w-1.5 h-1.5 rounded-full transition-all duration-500 ${
+                currentStep >= s
+                  ? "bg-foreground"
+                  : "bg-muted-foreground/20"
+              }`}
+            />
+          ))}
+        </div>
+      </footer>
     </div>
   );
 }
