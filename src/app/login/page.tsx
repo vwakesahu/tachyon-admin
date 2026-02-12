@@ -202,11 +202,9 @@ export default function LoginPage() {
         {session?.user && (
           <button
             onClick={() => signOut({ redirectTo: "/login" })}
-            className="flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+            className="text-xs text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
           >
-            <span className="font-mono">{session.user.email}</span>
-            <span className="text-border">|</span>
-            <span>Sign out</span>
+            Sign out
           </button>
         )}
       </header>

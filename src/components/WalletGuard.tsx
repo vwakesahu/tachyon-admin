@@ -2,19 +2,10 @@
 
 import { useAccount, useDisconnect } from "wagmi";
 import { signOut } from "next-auth/react";
-import { useCallback, useSyncExternalStore } from "react";
+import { useCallback, useContext } from "react";
+import { WalletReadyContext } from "@/providers/WalletProvider";
 
-// Track if we're on the client
-const emptySubscribe = () => () => {};
-function useIsClient() {
-  return useSyncExternalStore(
-    emptySubscribe,
-    () => true,
-    () => false
-  );
-}
-
-// Inner component that uses wagmi hooks - only rendered on client
+// Inner component that uses wagmi hooks - only rendered when providers are ready
 function WalletMismatchChecker({
   children,
   sessionWallet,
@@ -79,14 +70,12 @@ interface WalletGuardProps {
 }
 
 export function WalletGuard({ children, sessionWallet }: WalletGuardProps) {
-  const isClient = useIsClient();
+  const walletReady = useContext(WalletReadyContext);
 
-  // On server or before hydration, just render children
-  if (!isClient) {
+  if (!walletReady) {
     return <>{children}</>;
   }
 
-  // On client, check for wallet mismatch
   return (
     <WalletMismatchChecker sessionWallet={sessionWallet}>
       {children}

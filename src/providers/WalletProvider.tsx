@@ -10,8 +10,10 @@ import { WagmiProvider, type Config } from "wagmi";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { base } from "viem/chains";
 import { horizenMainnet } from "@/lib/chains";
-import { useState, useEffect } from "react";
+import { createContext, useState, useEffect } from "react";
 import { APP_NAME } from "@/lib/constants";
+
+export const WalletReadyContext = createContext(false);
 
 let wagmiConfig: Config | null = null;
 
@@ -36,13 +38,12 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   // During SSR or before mounting, render children without wallet providers
-  if (!mounted) {
-    return <>{children}</>;
-  }
-
-  // Check for project ID only on client
-  if (!process.env.NEXT_PUBLIC_WALLET_CONNECT_PROJECT_ID) {
-    return <>{children}</>;
+  if (!mounted || !process.env.NEXT_PUBLIC_WALLET_CONNECT_PROJECT_ID) {
+    return (
+      <WalletReadyContext.Provider value={false}>
+        {children}
+      </WalletReadyContext.Provider>
+    );
   }
 
   const config = getWagmiConfig();
@@ -51,7 +52,9 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     <WagmiProvider config={config}>
       <QueryClientProvider client={queryClient}>
         <RainbowKitProvider theme={darkTheme({ borderRadius: "none" })}>
-          {children}
+          <WalletReadyContext.Provider value={true}>
+            {children}
+          </WalletReadyContext.Provider>
         </RainbowKitProvider>
       </QueryClientProvider>
     </WagmiProvider>
