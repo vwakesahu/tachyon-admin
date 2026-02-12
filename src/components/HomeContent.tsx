@@ -3,6 +3,7 @@
 import { signOut } from "next-auth/react";
 import { WalletGuard } from "./WalletGuard";
 import {
+  useAccount,
   useBalance,
   useSendTransaction,
   useWriteContract,
@@ -25,17 +26,19 @@ interface TokenConfig {
   icon: string;
   decimals: number;
   address?: Address;
+  withdrawLimit: number;
 }
 
 const TOKENS: Record<number, TokenConfig[]> = {
   [base.id]: [
-    { symbol: "ETH", name: "Ethereum", icon: "/tokens/eth.svg", decimals: 18 },
+    { symbol: "ETH", name: "Ethereum", icon: "/tokens/eth.svg", decimals: 18, withdrawLimit: 1 },
     {
       symbol: "USDC",
       name: "USD Coin",
       icon: "/tokens/usdc.png",
       decimals: 6,
       address: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+      withdrawLimit: 5000,
     },
     {
       symbol: "ZEN",
@@ -44,10 +47,11 @@ const TOKENS: Record<number, TokenConfig[]> = {
       decimals: 18,
       // TODO: Set ZEN token address on Base
       address: "0x0000000000000000000000000000000000000000",
+      withdrawLimit: 10000,
     },
   ],
   [horizenMainnet.id]: [
-    { symbol: "ETH", name: "Ethereum", icon: "/tokens/eth.svg", decimals: 18 },
+    { symbol: "ETH", name: "Ethereum", icon: "/tokens/eth.svg", decimals: 18, withdrawLimit: 1 },
     {
       symbol: "USDC",
       name: "USD Coin",
@@ -55,6 +59,7 @@ const TOKENS: Record<number, TokenConfig[]> = {
       decimals: 6,
       // TODO: Set USDC token address on Horizen
       address: "0x0000000000000000000000000000000000000000",
+      withdrawLimit: 5000,
     },
     {
       symbol: "ZEN",
@@ -63,6 +68,7 @@ const TOKENS: Record<number, TokenConfig[]> = {
       decimals: 18,
       // TODO: Set ZEN token address on Horizen
       address: "0x0000000000000000000000000000000000000000",
+      withdrawLimit: 10000,
     },
   ],
 };
@@ -423,9 +429,9 @@ function WithdrawDialog({
   tokens: TokenConfig[];
   onClose: () => void;
 }) {
+  const { address: connectedAddress } = useAccount();
   const [selectedToken, setSelectedToken] = useState<TokenConfig>(tokens[0]);
   const [amount, setAmount] = useState("");
-  const [destination, setDestination] = useState("");
   const [txHash, setTxHash] = useState<string | null>(null);
 
   const { data: balance } = useBalance({
@@ -461,8 +467,11 @@ function WithdrawDialog({
     }
   };
 
+  const exceedsLimit =
+    !!amount && parseFloat(amount) > selectedToken.withdrawLimit;
+
   const handleWithdraw = () => {
-    if (!destination || !amount || isPending) return;
+    if (!connectedAddress || !amount || isPending || exceedsLimit) return;
 
     if (selectedToken.address) {
       writeContract(
@@ -471,7 +480,7 @@ function WithdrawDialog({
           abi: erc20TransferAbi,
           functionName: "transfer",
           args: [
-            destination as Address,
+            connectedAddress,
             parseUnits(amount, selectedToken.decimals),
           ],
           chainId,
@@ -483,7 +492,7 @@ function WithdrawDialog({
     } else {
       sendTransaction(
         {
-          to: destination as Address,
+          to: connectedAddress,
           value: parseUnits(amount, 18),
           chainId,
         },
@@ -634,21 +643,17 @@ function WithdrawDialog({
                 </div>
               </div>
 
-              {/* Destination */}
-              <div>
-                <label className="block text-xs font-mono text-muted-foreground uppercase tracking-wider mb-2">
-                  Destination
-                </label>
-                <input
-                  type="text"
-                  value={destination}
-                  onChange={(e) => setDestination(e.target.value)}
-                  placeholder="0x..."
-                  className="w-full bg-secondary border border-border px-4 py-3 text-foreground font-mono text-sm placeholder:text-muted-foreground/40 focus:outline-none focus:border-foreground/30 transition-colors"
-                />
-              </div>
+              {/* Limit note */}
+              <p className="text-xs text-muted-foreground">
+                Max withdrawal: {selectedToken.withdrawLimit.toLocaleString()} {selectedToken.symbol}
+              </p>
 
               {/* Error */}
+              {exceedsLimit && (
+                <p className="text-sm text-destructive">
+                  Amount exceeds the {selectedToken.withdrawLimit.toLocaleString()} {selectedToken.symbol} limit.
+                </p>
+              )}
               {error && (
                 <p className="text-sm text-destructive">
                   {error.message?.split("\n")[0] || "Transaction failed"}
@@ -658,7 +663,7 @@ function WithdrawDialog({
               {/* Submit */}
               <button
                 onClick={handleWithdraw}
-                disabled={!amount || !destination || isPending}
+                disabled={!amount || !connectedAddress || isPending || exceedsLimit}
                 className="w-full flex items-center justify-center gap-2 px-6 py-3.5 bg-foreground text-background font-medium text-sm hover:opacity-90 transition-opacity cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 {isPending ? (
