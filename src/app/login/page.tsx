@@ -1,6 +1,6 @@
 "use client";
 
-import { signIn, useSession } from "next-auth/react";
+import { signIn, signOut, useSession } from "next-auth/react";
 import dynamic from "next/dynamic";
 import { useEffect, useState } from "react";
 /* eslint-disable @next/next/no-img-element */
@@ -199,6 +199,16 @@ export default function LoginPage() {
             admin
           </span>
         </div>
+        {session?.user && (
+          <button
+            onClick={() => signOut({ redirectTo: "/login" })}
+            className="flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+          >
+            <span className="font-mono">{session.user.email}</span>
+            <span className="text-border">|</span>
+            <span>Sign out</span>
+          </button>
+        )}
       </header>
 
       {/* Main content */}
