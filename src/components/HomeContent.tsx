@@ -7,6 +7,7 @@ import {
   useBalance,
   useSendTransaction,
   useWriteContract,
+  useSwitchChain,
 } from "wagmi";
 import { useContext, useState } from "react";
 import { base } from "viem/chains";
@@ -20,6 +21,15 @@ const CHAINS = [
   { id: horizenMainnet.id, name: "Horizen", icon: "/chains/horizon.svg" },
 ] as const;
 
+const BLOCK_EXPLORERS: Record<number, string> = {
+  [base.id]: "https://basescan.org",
+  [horizenMainnet.id]: "https://horizen.calderaexplorer.xyz",
+};
+
+function getExplorerTxUrl(chainId: number, txHash: string): string {
+  return `${BLOCK_EXPLORERS[chainId]}/tx/${txHash}`;
+}
+
 interface TokenConfig {
   symbol: string;
   name: string;
@@ -27,11 +37,11 @@ interface TokenConfig {
   decimals: number;
   address?: Address;
   withdrawLimit: number;
+  disabled?: boolean;
 }
 
 const TOKENS: Record<number, TokenConfig[]> = {
   [base.id]: [
-    { symbol: "ETH", name: "Ethereum", icon: "/tokens/eth.svg", decimals: 18, withdrawLimit: 1 },
     {
       symbol: "USDC",
       name: "USD Coin",
@@ -40,35 +50,35 @@ const TOKENS: Record<number, TokenConfig[]> = {
       address: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
       withdrawLimit: 5000,
     },
+    { symbol: "ETH", name: "Ethereum", icon: "/tokens/eth.svg", decimals: 18, withdrawLimit: 1, disabled: true },
     {
       symbol: "ZEN",
       name: "Horizen",
       icon: "/tokens/zen.svg",
       decimals: 18,
-      // TODO: Set ZEN token address on Base
       address: "0x0000000000000000000000000000000000000000",
       withdrawLimit: 10000,
+      disabled: true,
     },
   ],
   [horizenMainnet.id]: [
-    { symbol: "ETH", name: "Ethereum", icon: "/tokens/eth.svg", decimals: 18, withdrawLimit: 1 },
     {
       symbol: "USDC",
       name: "USD Coin",
       icon: "/tokens/usdc.png",
       decimals: 6,
-      // TODO: Set USDC token address on Horizen
-      address: "0x0000000000000000000000000000000000000000",
+      address: "0xDF7108f8B10F9b9eC1aba01CCa057268cbf86B6c",
       withdrawLimit: 5000,
     },
+    { symbol: "ETH", name: "Ethereum", icon: "/tokens/eth.svg", decimals: 18, withdrawLimit: 1, disabled: true },
     {
       symbol: "ZEN",
       name: "Horizen",
       icon: "/tokens/zen.svg",
       decimals: 18,
-      // TODO: Set ZEN token address on Horizen
       address: "0x0000000000000000000000000000000000000000",
       withdrawLimit: 10000,
+      disabled: true,
     },
   ],
 };
@@ -91,14 +101,19 @@ const erc20TransferAbi = [
 function TokenRow({
   token,
   chainId,
+  treasuryAddress,
+  disabled,
 }: {
   token: TokenConfig;
   chainId: number;
+  treasuryAddress?: Address;
+  disabled?: boolean;
 }) {
   const { data: balance, isLoading } = useBalance({
-    address: TREASURY_ADDRESS || undefined,
+    address: treasuryAddress || undefined,
     chainId,
     token: token.address,
+    query: { enabled: !disabled && !!treasuryAddress },
   });
 
   const formatted = balance
@@ -109,7 +124,7 @@ function TokenRow({
     : "0.00";
 
   return (
-    <div className="group flex items-center justify-between py-5 border-b border-border/40 last:border-b-0 hover:bg-secondary/30 -mx-4 px-4 transition-colors">
+    <div className={`group flex items-center justify-between py-5 border-b border-border/40 last:border-b-0 -mx-4 px-4 transition-colors ${disabled ? "opacity-40" : "hover:bg-secondary/30"}`}>
       <div className="flex items-center gap-4">
         <div className="w-10 h-10 overflow-hidden bg-secondary shrink-0">
           <img
@@ -117,11 +132,11 @@ function TokenRow({
             alt={token.symbol}
             width={40}
             height={40}
-            className="w-full h-full object-cover"
+            className={`w-full h-full object-cover ${disabled ? "grayscale" : ""}`}
           />
         </div>
         <div>
-          <span className="block text-sm font-medium text-foreground">
+          <span className={`block text-sm font-medium ${disabled ? "text-muted-foreground" : "text-foreground"}`}>
             {token.name}
           </span>
           <span className="block text-[11px] text-muted-foreground uppercase tracking-wider">
@@ -130,7 +145,9 @@ function TokenRow({
         </div>
       </div>
       <div className="text-right">
-        {isLoading ? (
+        {disabled ? (
+          <span className="text-xs font-mono text-muted-foreground/60">Coming soon</span>
+        ) : isLoading ? (
           <div className="w-24 h-6 bg-secondary animate-pulse" />
         ) : (
           <span className="text-base font-mono font-medium text-foreground tabular-nums">
@@ -142,18 +159,22 @@ function TokenRow({
   );
 }
 
-const TREASURY_ADDRESS = (process.env.NEXT_PUBLIC_TREASURY_ADDRESS ??
-  "") as Address;
+const TREASURY_ADDRESSES: Record<number, Address> = {
+  [base.id]: "0xBa09cE9986f3BE2E553f155F02987122C84Fae63",
+  [horizenMainnet.id]: "0x5f38111Aa32a66F78ce447c6824D9976b8F4e654",
+};
 
 function DepositDialog({
   walletAddress,
   chainId,
   tokens,
+  treasuryAddress,
   onClose,
 }: {
   walletAddress: Address;
   chainId: number;
   tokens: TokenConfig[];
+  treasuryAddress: Address;
   onClose: () => void;
 }) {
   const [selectedToken, setSelectedToken] = useState<TokenConfig>(tokens[0]);
@@ -192,7 +213,7 @@ function DepositDialog({
   };
 
   const handleDeposit = () => {
-    if (!amount || isPending || !TREASURY_ADDRESS) return;
+    if (!amount || isPending || !treasuryAddress) return;
 
     if (selectedToken.address) {
       writeContract(
@@ -201,7 +222,7 @@ function DepositDialog({
           abi: erc20TransferAbi,
           functionName: "transfer",
           args: [
-            TREASURY_ADDRESS,
+            treasuryAddress,
             parseUnits(amount, selectedToken.decimals),
           ],
           chainId,
@@ -211,7 +232,7 @@ function DepositDialog({
     } else {
       sendTransaction(
         {
-          to: TREASURY_ADDRESS,
+          to: treasuryAddress,
           value: parseUnits(amount, 18),
           chainId,
         },
@@ -254,10 +275,9 @@ function DepositDialog({
 
         {/* Body */}
         <div className="p-6 space-y-5">
-          {!TREASURY_ADDRESS ? (
+          {!treasuryAddress ? (
             <p className="text-sm text-destructive">
-              Solver address not configured. Set NEXT_PUBLIC_TREASURY_ADDRESS
-              in your environment.
+              Solver address not configured for this chain.
             </p>
           ) : txHash ? (
             <div className="space-y-4 py-4">
@@ -282,11 +302,19 @@ function DepositDialog({
                 <p className="text-foreground font-medium">
                   Deposit Submitted
                 </p>
-                <div className="bg-secondary p-3 border border-border">
-                  <p className="font-mono text-xs text-muted-foreground break-all">
+                <a
+                  href={getExplorerTxUrl(chainId, txHash)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="block bg-secondary p-3 border border-border hover:border-foreground/30 transition-colors group"
+                >
+                  <p className="font-mono text-xs text-muted-foreground break-all group-hover:text-foreground transition-colors">
                     {txHash}
                   </p>
-                </div>
+                  <p className="text-[11px] text-muted-foreground/60 mt-1.5 group-hover:text-muted-foreground transition-colors">
+                    View on explorer &rarr;
+                  </p>
+                </a>
               </div>
               <button
                 onClick={onClose}
@@ -303,7 +331,7 @@ function DepositDialog({
                   Solver
                 </p>
                 <p className="font-mono text-xs text-foreground break-all">
-                  {TREASURY_ADDRESS}
+                  {treasuryAddress}
                 </p>
               </div>
 
@@ -378,7 +406,7 @@ function DepositDialog({
               {/* Error */}
               {error && (
                 <p className="text-sm text-destructive">
-                  {error.message?.split("\n")[0] || "Transaction failed"}
+                  {error.message?.includes("User rejected") ? "Transaction rejected by user" : error.message?.split("\n")[0] || "Transaction failed"}
                 </p>
               )}
 
@@ -423,10 +451,12 @@ function DepositDialog({
 function WithdrawDialog({
   chainId,
   tokens,
+  treasuryAddress,
   onClose,
 }: {
   chainId: number;
   tokens: TokenConfig[];
+  treasuryAddress: Address;
   onClose: () => void;
 }) {
   const { address: connectedAddress } = useAccount();
@@ -435,7 +465,7 @@ function WithdrawDialog({
   const [txHash, setTxHash] = useState<string | null>(null);
 
   const { data: balance } = useBalance({
-    address: TREASURY_ADDRESS || undefined,
+    address: treasuryAddress || undefined,
     chainId,
     token: selectedToken.address,
   });
@@ -558,13 +588,21 @@ function WithdrawDialog({
               </div>
               <div className="text-center space-y-2">
                 <p className="text-foreground font-medium">
-                  Transaction Submitted
+                  Withdrawal Submitted
                 </p>
-                <div className="bg-secondary p-3 border border-border">
-                  <p className="font-mono text-xs text-muted-foreground break-all">
+                <a
+                  href={getExplorerTxUrl(chainId, txHash)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="block bg-secondary p-3 border border-border hover:border-foreground/30 transition-colors group"
+                >
+                  <p className="font-mono text-xs text-muted-foreground break-all group-hover:text-foreground transition-colors">
                     {txHash}
                   </p>
-                </div>
+                  <p className="text-[11px] text-muted-foreground/60 mt-1.5 group-hover:text-muted-foreground transition-colors">
+                    View on explorer &rarr;
+                  </p>
+                </a>
               </div>
               <button
                 onClick={onClose}
@@ -656,7 +694,7 @@ function WithdrawDialog({
               )}
               {error && (
                 <p className="text-sm text-destructive">
-                  {error.message?.split("\n")[0] || "Transaction failed"}
+                  {error.message?.includes("User rejected") ? "Transaction rejected by user" : error.message?.split("\n")[0] || "Transaction failed"}
                 </p>
               )}
 
@@ -714,11 +752,62 @@ export function HomeContent({ email, walletAddress }: HomeContentProps) {
   );
 }
 
+const SUPPORTED_CHAIN_IDS = CHAINS.map((c) => c.id) as readonly number[];
+
+function UnsupportedChainBanner() {
+  const { switchChain } = useSwitchChain();
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-background/90 backdrop-blur-sm" />
+      <div className="relative bg-card border border-border w-full max-w-md p-8 text-center space-y-6">
+        <div className="w-14 h-14 mx-auto bg-destructive/10 flex items-center justify-center">
+          <svg className="w-7 h-7 text-destructive" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+          </svg>
+        </div>
+        <div className="space-y-2">
+          <h2 className="text-lg font-heading font-semibold text-foreground">Unsupported Network</h2>
+          <p className="text-sm text-muted-foreground">
+            Please switch to a supported chain to continue.
+          </p>
+        </div>
+        <div className="flex flex-col gap-2">
+          {CHAINS.map((chain) => (
+            <button
+              key={chain.id}
+              onClick={() => switchChain({ chainId: chain.id })}
+              className="flex items-center justify-center gap-3 w-full px-5 py-3.5 bg-foreground text-background font-medium text-sm hover:opacity-90 transition-opacity cursor-pointer"
+            >
+              <img src={chain.icon} alt={chain.name} width={20} height={20} className="w-5 h-5 object-cover bg-secondary" />
+              Switch to {chain.name}
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function HomeContentInner({ email, walletAddress }: HomeContentProps) {
-  const [selectedChain, setSelectedChain] = useState<number>(CHAINS[0].id);
+  const { chainId: walletChainId } = useAccount();
+  const { switchChain } = useSwitchChain();
   const [showDeposit, setShowDeposit] = useState(false);
   const [showWithdraw, setShowWithdraw] = useState(false);
-  const tokens = TOKENS[selectedChain] || [];
+
+  const selectedChain = (walletChainId && SUPPORTED_CHAIN_IDS.includes(walletChainId))
+    ? walletChainId
+    : CHAINS[0].id;
+  const isUnsupportedChain = walletChainId != null && !SUPPORTED_CHAIN_IDS.includes(walletChainId);
+
+  const treasuryAddress = TREASURY_ADDRESSES[selectedChain];
+  const allTokens = TOKENS[selectedChain] || [];
+  const tokens = allTokens.filter((t) => !t.disabled);
+  const disabledTokens = allTokens.filter((t) => t.disabled);
+
+  const handleChainSelect = (chainId: number) => {
+    switchChain({ chainId });
+  };
 
   return (
     <WalletGuard sessionWallet={walletAddress}>
@@ -779,7 +868,7 @@ function HomeContentInner({ email, walletAddress }: HomeContentProps) {
               {CHAINS.map((chain) => (
                 <button
                   key={chain.id}
-                  onClick={() => setSelectedChain(chain.id)}
+                  onClick={() => handleChainSelect(chain.id)}
                   className={`flex items-center gap-2.5 px-4 py-2.5 text-sm font-medium transition-all cursor-pointer ${
                     selectedChain === chain.id
                       ? "bg-foreground text-background"
@@ -801,16 +890,38 @@ function HomeContentInner({ email, walletAddress }: HomeContentProps) {
             {/* Divider */}
             <div className="h-px bg-border mb-1" />
 
-            {/* Token list */}
-            <div className="mb-10">
+            {/* Active tokens */}
+            <div className="mb-2">
               {tokens.map((token) => (
                 <TokenRow
                   key={`${selectedChain}-${token.symbol}`}
                   token={token}
                   chainId={selectedChain}
+                  treasuryAddress={treasuryAddress}
                 />
               ))}
             </div>
+
+            {/* Disabled tokens */}
+            {disabledTokens.length > 0 && (
+              <div className="mb-10">
+                <div className="flex items-center gap-3 mt-6 mb-1">
+                  <span className="text-[11px] font-mono text-muted-foreground/50 uppercase tracking-wider">
+                    Coming Soon
+                  </span>
+                  <div className="flex-1 h-px bg-border/30" />
+                </div>
+                {disabledTokens.map((token) => (
+                  <TokenRow
+                    key={`${selectedChain}-${token.symbol}`}
+                    token={token}
+                    chainId={selectedChain}
+                    treasuryAddress={treasuryAddress}
+                    disabled
+                  />
+                ))}
+              </div>
+            )}
 
             {/* Actions */}
             <div className="flex gap-3">
@@ -866,12 +977,16 @@ function HomeContentInner({ email, walletAddress }: HomeContentProps) {
           </span>
         </footer>
 
+        {/* Unsupported chain overlay */}
+        {isUnsupportedChain && <UnsupportedChainBanner />}
+
         {/* Dialogs */}
         {showDeposit && (
           <DepositDialog
             walletAddress={walletAddress as Address}
             chainId={selectedChain}
             tokens={tokens}
+            treasuryAddress={treasuryAddress}
             onClose={() => setShowDeposit(false)}
           />
         )}
@@ -879,6 +994,7 @@ function HomeContentInner({ email, walletAddress }: HomeContentProps) {
           <WithdrawDialog
             chainId={selectedChain}
             tokens={tokens}
+            treasuryAddress={treasuryAddress}
             onClose={() => setShowWithdraw(false)}
           />
         )}
