@@ -14,6 +14,10 @@ import { base } from "viem/chains";
 import { horizenMainnet } from "@/lib/chains";
 import { parseUnits, type Address } from "viem";
 import { WalletReadyContext } from "@/providers/WalletProvider";
+import {
+  proposeSafeWithdrawal,
+  getSafeDashboardUrl,
+} from "@/lib/safe";
 /* eslint-disable @next/next/no-img-element */
 
 const CHAINS = [
@@ -459,10 +463,12 @@ function WithdrawDialog({
   treasuryAddress: Address;
   onClose: () => void;
 }) {
-  const { address: connectedAddress } = useAccount();
+  const { address: connectedAddress, connector } = useAccount();
   const [selectedToken, setSelectedToken] = useState<TokenConfig>(tokens[0]);
   const [amount, setAmount] = useState("");
-  const [txHash, setTxHash] = useState<string | null>(null);
+  const [isPending, setIsPending] = useState(false);
+  const [safeTxHash, setSafeTxHash] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const { data: balance } = useBalance({
     address: treasuryAddress || undefined,
@@ -470,24 +476,10 @@ function WithdrawDialog({
     token: selectedToken.address,
   });
 
-  const {
-    sendTransaction,
-    isPending: isSendingNative,
-    error: nativeError,
-  } = useSendTransaction();
-
-  const {
-    writeContract,
-    isPending: isSendingErc20,
-    error: erc20Error,
-  } = useWriteContract();
-
-  const isPending = isSendingNative || isSendingErc20;
-  const error = nativeError || erc20Error;
-
   const handleTokenChange = (token: TokenConfig) => {
     setSelectedToken(token);
-    setTxHash(null);
+    setSafeTxHash(null);
+    setError(null);
     setAmount("");
   };
 
@@ -500,38 +492,44 @@ function WithdrawDialog({
   const exceedsLimit =
     !!amount && parseFloat(amount) > selectedToken.withdrawLimit;
 
-  const handleWithdraw = () => {
-    if (!connectedAddress || !amount || isPending || exceedsLimit) return;
+  const handleWithdraw = async () => {
+    if (!connectedAddress || !amount || isPending || exceedsLimit || !connector)
+      return;
 
-    if (selectedToken.address) {
-      writeContract(
-        {
-          address: selectedToken.address,
-          abi: erc20TransferAbi,
-          functionName: "transfer",
-          args: [
-            connectedAddress,
-            parseUnits(amount, selectedToken.decimals),
-          ],
-          chainId,
-        },
-        {
-          onSuccess: (hash) => setTxHash(hash),
-        }
-      );
-    } else {
-      sendTransaction(
-        {
-          to: connectedAddress,
-          value: parseUnits(amount, 18),
-          chainId,
-        },
-        {
-          onSuccess: (hash) => setTxHash(hash),
-        }
-      );
+    setIsPending(true);
+    setError(null);
+
+    try {
+      const provider = await connector.getProvider();
+
+      const result = await proposeSafeWithdrawal({
+        provider,
+        safeAddress: treasuryAddress,
+        senderAddress: connectedAddress,
+        recipientAddress: connectedAddress,
+        chainId,
+        tokenAddress: selectedToken.address,
+        amount,
+        decimals: selectedToken.decimals,
+      });
+
+      setSafeTxHash(result.safeTxHash);
+    } catch (err: unknown) {
+      const msg =
+        err instanceof Error ? err.message : "Failed to propose transaction";
+      if (msg.includes("User rejected") || msg.includes("user rejected")) {
+        setError("Signature rejected by user");
+      } else if (msg.includes("is not an owner")) {
+        setError("Your wallet is not an owner of this Safe");
+      } else {
+        setError(msg.split("\n")[0]);
+      }
+    } finally {
+      setIsPending(false);
     }
   };
+
+  const safeDashboardUrl = getSafeDashboardUrl(chainId, treasuryAddress);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -567,7 +565,7 @@ function WithdrawDialog({
 
         {/* Body */}
         <div className="p-6 space-y-5">
-          {txHash ? (
+          {safeTxHash ? (
             <div className="space-y-4 py-4">
               <div className="flex justify-center">
                 <div className="w-12 h-12 bg-chart-2/10 flex items-center justify-center">
@@ -588,25 +586,31 @@ function WithdrawDialog({
               </div>
               <div className="text-center space-y-2">
                 <p className="text-foreground font-medium">
-                  Withdrawal Submitted
+                  Withdrawal Proposed
                 </p>
-                <a
-                  href={getExplorerTxUrl(chainId, txHash)}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="block bg-secondary p-3 border border-border hover:border-foreground/30 transition-colors group"
-                >
-                  <p className="font-mono text-xs text-muted-foreground break-all group-hover:text-foreground transition-colors">
-                    {txHash}
+                <p className="text-sm text-muted-foreground">
+                  Transaction has been proposed to the Safe. Other signers can now approve it.
+                </p>
+                <div className="bg-secondary p-3 border border-border">
+                  <p className="text-[11px] font-mono text-muted-foreground/60 uppercase tracking-wider mb-1">
+                    Safe Tx Hash
                   </p>
-                  <p className="text-[11px] text-muted-foreground/60 mt-1.5 group-hover:text-muted-foreground transition-colors">
-                    View on explorer &rarr;
+                  <p className="font-mono text-xs text-muted-foreground break-all">
+                    {safeTxHash}
                   </p>
-                </a>
+                </div>
               </div>
+              <a
+                href={safeDashboardUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="block w-full px-6 py-3.5 bg-foreground text-background font-medium text-sm text-center hover:opacity-90 transition-opacity cursor-pointer"
+              >
+                Open Safe Dashboard &rarr;
+              </a>
               <button
                 onClick={onClose}
-                className="w-full px-6 py-3.5 bg-foreground text-background font-medium text-sm hover:opacity-90 transition-opacity cursor-pointer"
+                className="w-full px-6 py-3.5 border border-border text-foreground font-medium text-sm hover:bg-secondary transition-colors cursor-pointer"
               >
                 Done
               </button>
@@ -634,7 +638,7 @@ function WithdrawDialog({
                         alt={token.symbol}
                         width={16}
                         height={16}
-                        className={`w-4 h-4 object-cover  ${token.symbol === 'ZEN' ? "bg-secondary" : ""}`}
+                        className={`w-4 h-4 object-cover ${token.symbol === "ZEN" ? "bg-secondary" : ""}`}
                       />
                       {token.symbol}
                     </button>
@@ -649,7 +653,7 @@ function WithdrawDialog({
                     Amount
                   </label>
                   <span className="text-xs text-muted-foreground font-mono">
-                    Balance:{" "}
+                    Safe Balance:{" "}
                     {balance
                       ? parseFloat(balance.formatted).toLocaleString(
                           undefined,
@@ -683,35 +687,72 @@ function WithdrawDialog({
 
               {/* Limit note */}
               <p className="text-xs text-muted-foreground">
-                Max withdrawal: {selectedToken.withdrawLimit.toLocaleString()} {selectedToken.symbol}
+                Max withdrawal: {selectedToken.withdrawLimit.toLocaleString()}{" "}
+                {selectedToken.symbol}
               </p>
+
+              {/* Info */}
+              <div className="flex items-start gap-2 bg-secondary/50 p-3 border border-border">
+                <svg
+                  className="w-4 h-4 text-muted-foreground shrink-0 mt-0.5"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={1.5}
+                    d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z"
+                  />
+                </svg>
+                <p className="text-xs text-muted-foreground">
+                  This will propose a transaction to the Safe multisig. Other
+                  signers must approve before execution.
+                </p>
+              </div>
 
               {/* Error */}
               {exceedsLimit && (
                 <p className="text-sm text-destructive">
-                  Amount exceeds the {selectedToken.withdrawLimit.toLocaleString()} {selectedToken.symbol} limit.
+                  Amount exceeds the{" "}
+                  {selectedToken.withdrawLimit.toLocaleString()}{" "}
+                  {selectedToken.symbol} limit.
                 </p>
               )}
               {error && (
-                <p className="text-sm text-destructive">
-                  {error.message?.includes("User rejected") ? "Transaction rejected by user" : error.message?.split("\n")[0] || "Transaction failed"}
-                </p>
+                <p className="text-sm text-destructive">{error}</p>
               )}
 
               {/* Submit */}
               <button
                 onClick={handleWithdraw}
-                disabled={!amount || !connectedAddress || isPending || exceedsLimit}
+                disabled={
+                  !amount || !connectedAddress || isPending || exceedsLimit
+                }
                 className="w-full flex items-center justify-center gap-2 px-6 py-3.5 bg-foreground text-background font-medium text-sm hover:opacity-90 transition-opacity cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 {isPending ? (
                   <>
                     <div className="w-4 h-4 border-2 border-background/40 border-t-background animate-spin" />
-                    Confirming...
+                    Proposing to Safe...
                   </>
                 ) : (
                   <>
-                    Withdraw {selectedToken.symbol}
+                    <svg
+                      className="w-4 h-4"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M5 10l7-7m0 0l7 7m-7-7v18"
+                      />
+                    </svg>
+                    Propose Withdrawal
                   </>
                 )}
               </button>
